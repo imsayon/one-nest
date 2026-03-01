@@ -1,0 +1,114 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  homeCity     String?  @map("home_city")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  preferences   UserPreferences?
+  queries       Query[]
+  embeddings    UserContextEmbedding[]
+  wardrobeItems WardrobeItem[]
+
+  @@map("users")
+}
+
+model UserPreferences {
+  id                  String   @id @default(uuid())
+  userId              String   @unique @map("user_id")
+  travelMode          String   @default("flight") @map("travel_mode")
+  budgetTier          String   @default("mid-range") @map("budget_tier")
+  dietaryRestrictions String[] @map("dietary_restrictions")
+  musicPlatforms      String[] @map("music_platforms")
+  wardrobeStyle       String   @default("smart-casual") @map("wardrobe_style")
+  currency            String   @default("INR")
+  timezone            String   @default("Asia/Kolkata")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model Query {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  rawInput         String   @map("raw_input")
+  extractedContext Json?    @map("extracted_context")
+  status           String   @default("pending")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentResults AgentResult[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("queries")
+}
+
+model AgentResult {
+  id                   String   @id @default(uuid())
+  queryId              String   @map("query_id")
+  agentId              String   @map("agent_id")
+  status               String
+  data                 Json?
+  error                String?
+  confidence           Float    @default(0)
+  executionTimeMs      Int      @default(0) @map("execution_time_ms")
+  requiresConfirmation Boolean  @default(false) @map("requires_confirmation")
+  actions              Json     @default("[]")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  query Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
+
+  @@index([queryId])
+  @@index([agentId])
+  @@map("agent_results")
+}
+
+/// Embeddings stored as text for compatibility with pgvector via raw SQL
+model UserContextEmbedding {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  contentText String   @map("content_text")
+  embedding   String?  @map("embedding")
+  contextType String   @map("context_type")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_context_embeddings")
+}
+
+model WardrobeItem {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  name           String
+  category       String
+  formalityLevel String   @default("casual") @map("formality_level")
+  climateTags    String[] @map("climate_tags")
+  imageUrl       String?  @map("image_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("wardrobe_items")
+}

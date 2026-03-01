@@ -1,0 +1,90 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: onenest_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-onenest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onenest_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-onenest}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onenest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: onenest_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: onenest_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-onenest}:${POSTGRES_PASSWORD:-onenest_secret}@postgres:5432/${POSTGRES_DB:-onenest}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run start:dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: onenest_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: onenest_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@onenest.ai}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+  redis_data:
